@@ -1,4 +1,4 @@
-import { DayData, ReminderState, ReminderInterval } from "@/types";
+import { DayData, ReminderState } from "@/types";
 
 const STORAGE_KEY = "water-tracker-data";
 const REMINDER_KEY = "water-tracker-reminder";
@@ -8,30 +8,30 @@ export function getTodayKey(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+export function getAllData(): Record<string, DayData> {
+  if (typeof window === "undefined") return {};
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : {};
+}
+
 export function getTodayData(): DayData {
   if (typeof window === "undefined") {
     return { date: getTodayKey(), logs: [], target: 2000 };
   }
-
   const target = getTarget();
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return { date: getTodayKey(), logs: [], target };
-
-  const allData: Record<string, DayData> = JSON.parse(raw);
+  const allData = getAllData();
   const today = getTodayKey();
   return allData[today] ?? { date: today, logs: [], target };
 }
 
 export function saveTodayData(data: DayData): void {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  const allData: Record<string, DayData> = raw ? JSON.parse(raw) : {};
+  const allData = getAllData();
   allData[data.date] = data;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
 }
 
 export function resetToday(): void {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  const allData: Record<string, DayData> = raw ? JSON.parse(raw) : {};
+  const allData = getAllData();
   const today = getTodayKey();
   delete allData[today];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
@@ -55,4 +55,33 @@ export function getReminderState(): ReminderState {
 
 export function saveReminderState(state: ReminderState): void {
   localStorage.setItem(REMINDER_KEY, JSON.stringify(state));
+}
+
+// Returns last N days as array [{date, total, target, pct}]
+export function getHistoryDays(days: number): Array<{
+  date: string;
+  total: number;
+  target: number;
+  pct: number;
+  hasData: boolean;
+}> {
+  const allData = getAllData();
+  const target = getTarget();
+  const result = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split("T")[0];
+    const day = allData[key];
+    const total = day ? day.logs.reduce((s, l) => s + l.amount, 0) : 0;
+    const t = day?.target ?? target;
+    result.push({
+      date: key,
+      total,
+      target: t,
+      pct: Math.min(total / t, 1),
+      hasData: !!day,
+    });
+  }
+  return result;
 }
